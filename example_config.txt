@@ -1,0 +1,6 @@
+(YOUR OPENWEATHERMAP API KEY HERE)	api key
+(YOUR ZIP CODE HERE)		zip code
+255		default backlight brightness
+16		night mode backlight brightness
+23:00:00	night mode start
+06:00:00	night mode end
