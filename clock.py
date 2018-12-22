@@ -7,19 +7,22 @@ import requests #for weather api calls
 import json #for weather api response json
 import time #for sleep
 
-#check if run as sudo (required for backlighting)
-if(os.getuid() != 0):
-    print("ERROR: clock.py must be run as sudo")
-    sys.exit()
-
 def rel_to_abs_coord(pos, display_info):
     return (pos[0]*display_info.current_w, pos[1]*display_info.current_h)
 
 def rel_to_abs_surf(surf, pos, display_info):
     return (rel_to_abs_coord(pos, display_info)[0] - (surf.get_rect().width / 2), rel_to_abs_coord(pos, display_info)[1] - (surf.get_rect().height / 2))
 
+def time_print(string):
+    print("["+str(datetime.datetime.now())+"]: "+string)
+
+#check if run as sudo (required for backlighting)
+if(os.getuid() != 0):
+    time_print("ERROR: clock.py must be run as sudo")
+    sys.exit()
+
 #initialize pygame
-print("Initializing pygame...")
+time_print("Initializing pygame...")
 pygame.init()
 
 screen = pygame.display.set_mode((0, 0), pygame.FULLSCREEN)
@@ -104,7 +107,7 @@ weather_count = 0
 def load_config():
     global api_url_end, backlight_default, backlight_night_mode, night_mode_start, night_mode_end, alarm_time
 
-    print("Loading config file..")
+    time_print("Loading config file..")
     config = open('config.txt','r')
 
     api_key = config.readline().split()[0]
@@ -173,7 +176,7 @@ def update_weather():
             
         
     else:
-        print("ERROR: Could not load weather")
+        time_print("ERROR: Could not load weather")
 
 def is_night_mode(time):
     if night_mode_start < night_mode_end:
@@ -311,7 +314,7 @@ def main():
     pygame.quit()
     set_backlight(backlight_default)
 
-    print("Quitting: {0} redraws, {1} weather api calls".format(draw_count, weather_count))
+    time_print("Quitting: {0} redraws, {1} weather api calls".format(draw_count, weather_count))
 
 if __name__ == "__main__":
     main()
