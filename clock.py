@@ -131,10 +131,12 @@ def set_backlight(val):
 
 def get_weather_data(request_type):
     response = requests.get(api_url + request_type + api_url_end)
-    
-    if response.status_code == 200:
-        return json.loads(response.content.decode('utf-8'))
-    else:
+    try:
+        if response.status_code == 200:
+            return json.loads(response.content.decode('utf-8'))
+        else:
+            return None
+    except:
         return None
     
 def update_weather():
