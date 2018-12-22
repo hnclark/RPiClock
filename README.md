@@ -9,3 +9,9 @@ Rename `example_config.txt` to `config.txt` and edit it to contain the relevant 
 ## Running the clock
 
 Simply run `sudo python clock.py` to run the program. It requires sudo to change the display's backlight brightness
+
+##Credits
+
+Weather data gathered from OpenWeatherMap (openweathermap.org)
+
+Graphics done using PyGame (pygame.org)
