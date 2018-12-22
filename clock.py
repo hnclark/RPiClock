@@ -11,10 +11,29 @@ import time #for sleep
 if(os.getuid() != 0):
     print("ERROR: clock.py must be run as sudo")
     sys.exit()
-        
+
+def rel_to_abs_coord(pos, display_info):
+    return (pos[0]*display_info.current_w, pos[1]*display_info.current_h)
+
+def rel_to_abs_surf(surf, pos, display_info):
+    return (rel_to_abs_coord(pos, display_info)[0] - (surf.get_rect().width / 2), rel_to_abs_coord(pos, display_info)[1] - (surf.get_rect().height / 2))
+
 #initialize pygame
 print("Initializing pygame...")
 pygame.init()
+
+screen = pygame.display.set_mode((0, 0), pygame.FULLSCREEN)
+#for debugging (if a pygame script crashes while fullscreen it cannot be exited)
+#screen = pygame.display.set_mode((800,400))
+
+pygame.display.set_caption("Clock")
+
+#if pygame.mouse.set_visible(False) is used, the touchscreen doesn't work
+#we can work around that by making a cursor with no visible pixels that is set visible
+pygame.mouse.set_cursor((8,8),(0,0),(0,0,0,0,0,0,0,0),(0,0,0,0,0,0,0,0))
+
+#display info
+display_info = pygame.display.Info()
 
 #background
 bg_color = (0, 0, 0)
@@ -36,12 +55,23 @@ weather_icon_position = (10, 10)
 weather_icon = pygame.image.load("icons/03d.png")
 
 #weather info
+weather_panel_bbox = pygame.Rect((0, 0),(display_info.current_w, 60))
+
 info_font = pygame.font.SysFont('Roboto', 24)
 info_color= (255, 255, 255)
 info_position = (70, 15)
 info_aa = True
 
 weather_string = "Loading weather..."
+
+#forecast
+forecast_date_offset = (0, 30)
+forecast_icon_offset = (0, 70)
+
+forecast_list = []
+
+#current opened panel
+opened_panel = None
 
 #current time
 current_datetime = datetime.datetime.now()
@@ -51,8 +81,8 @@ night_mode_start = datetime.time(hour = 21)
 night_mode_end = datetime.time(hour = 5)
 
 #weather
-api_url = "http://api.openweathermap.org/data/2.5/weather"
-api_url_full = ""
+api_url = "http://api.openweathermap.org/data/2.5/"
+api_url_end = ""
 
 #display
 backlight_default = 255
@@ -62,14 +92,8 @@ backlight_night_mode = 64
 draw_count = 0
 weather_count = 0
 
-def rel_to_abs_coord(pos, display_info):
-    return (pos[0]*display_info.current_w, pos[1]*display_info.current_h)
-
-def rel_to_abs_surf(surf, pos, display_info):
-    return (rel_to_abs_coord(pos, display_info)[0] - (surf.get_rect().width / 2), rel_to_abs_coord(pos, display_info)[1] - (surf.get_rect().height / 2))
-
 def load_config():
-    global api_url_full, backlight_default, backlight_night_mode, night_mode_start, night_mode_end
+    global api_url_end, backlight_default, backlight_night_mode, night_mode_start, night_mode_end
 
     print("Loading config file..")
     config = open('config.txt','r')
@@ -77,7 +101,7 @@ def load_config():
     api_key = config.readline().split()[0]
     api_zip = config.readline().split()[0]
     
-    api_url_full = api_url+"?zip="+api_zip+"&appid="+api_key
+    api_url_end = "?zip="+api_zip+"&appid="+api_key
 
     backlight_default = int(config.readline().split()[0])
     backlight_night_mode = int(config.readline().split()[0])
@@ -94,8 +118,8 @@ def set_backlight(val):
     backlight_file.write(str(val))
     backlight_file.close()
 
-def get_weather_data():
-    response = requests.get(api_url_full)
+def get_weather_data(request_type):
+    response = requests.get(api_url + request_type + api_url_end)
     
     if response.status_code == 200:
         return json.loads(response.content.decode('utf-8'))
@@ -103,12 +127,15 @@ def get_weather_data():
         return None
     
 def update_weather():
-    global weather_string, weather_icon, weather_count
+    global weather_string, weather_icon, forecast_list, weather_count
 
-    weather_count += 1
+    weather_count += 2
     
-    weather_data = get_weather_data()
-    if weather_data:
+    weather_data = get_weather_data("weather")
+
+    forecast_data = get_weather_data("forecast")
+    
+    if weather_data and forecast_data:
         temp_k = float(weather_data["main"]["temp"])
         temp_c = temp_k - 273
         temp_f = (9*(temp_k - 273)/5) + 32
@@ -119,6 +146,19 @@ def update_weather():
         
         weather_icon_name = weather_data["weather"][0]["icon"]
         weather_icon = pygame.image.load("icons/{0}.png".format(weather_icon_name))
+
+        for forecast in forecast_data["list"]:
+            date = datetime.datetime.strptime(forecast["dt_txt"], "%Y-%m-%d %H:%M:%S")
+            desc = forecast["weather"][0]["main"]
+            icon_name = forecast["weather"][0]["icon"]
+            icon = pygame.image.load("icons/{0}.png".format(icon_name))
+
+            #only append forecasts at 15:00 to simplify display
+            if date.time().hour == 15:
+                forecast_list.append((date, desc, icon))
+            
+            
+        
     else:
         print("ERROR: Could not load weather")
 
@@ -153,28 +193,41 @@ def draw(display_info, screen):
 
     subheader_surface = subheader_font.render(date_string, subheader_aa, subheader_color)
     screen.blit(subheader_surface, rel_to_abs_surf(subheader_surface, subheader_position, display_info))
-    
-    screen.blit(weather_icon, weather_icon_position)
+
+    if opened_panel == "weather_panel":
+        for index, forecast in enumerate(forecast_list):
+            base_pos = (0.1 + 0.2*index, 0)
+            
+            forecast_date_surface = info_font.render(forecast[0].strftime("%A"), info_aa, info_color)
+            date_centered_pos = rel_to_abs_surf(forecast_date_surface, base_pos, display_info)
+            date_pos = (date_centered_pos[0] + forecast_date_offset[0], date_centered_pos[1] + forecast_date_offset[1])
+            screen.blit(forecast_date_surface, date_pos)
+
+            forecast_icon_surface = forecast[2]
+            icon_centered_pos = rel_to_abs_surf(forecast_icon_surface, base_pos, display_info)
+            icon_pos = (icon_centered_pos[0] + forecast_icon_offset[0], icon_centered_pos[1] + forecast_icon_offset[1])
+            screen.blit(forecast_icon_surface, icon_pos)
+            
+    else:
+        screen.blit(weather_icon, weather_icon_position)
                 
-    info_surface = info_font.render(weather_string, info_aa, info_color)
-    screen.blit(info_surface, info_position)
+        info_surface = info_font.render(weather_string, info_aa, info_color)
+        screen.blit(info_surface, info_position)
     
     pygame.display.flip()
 
+def handle_panels(mouse_pos):
+    global opened_panel
+    
+    if weather_panel_bbox.collidepoint(mouse_pos):
+        opened_panel = "weather_panel"
+    else:
+        opened_panel = None
+
 def main():
-    global current_datetime
+    global current_datetime, opened_panel
 
     load_config()
-
-    screen = pygame.display.set_mode((0, 0), pygame.FULLSCREEN)
-    #for debugging (if a pygame script crashes while fullscreen it cannot be exited)
-    #screen = pygame.display.set_mode((800,400))
-
-    pygame.display.set_caption("Clock")
-    pygame.mouse.set_visible(False)
-
-    #display info
-    display_info = pygame.display.Info()
 
     #preliminary draw, so the user sees more than a black screen
     draw(display_info, screen)
@@ -191,6 +244,9 @@ def main():
         for event in pygame.event.get():
             if event.type == pygame.QUIT or (event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE):
                 running = False
+            elif event.type == pygame.MOUSEBUTTONUP:
+                handle_panels(pygame.mouse.get_pos())
+                draw(display_info, screen)
 
         #get current time
         prev_datetime = current_datetime
