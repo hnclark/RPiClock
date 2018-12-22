@@ -37,7 +37,9 @@ display_info = pygame.display.Info()
 
 #background
 bg_color = (0, 0, 0)
-    
+
+bg_color_alarm = (41, 171, 135)
+
 #header
 header_font = pygame.font.SysFont('Roboto', 288)
 header_color= (255, 255, 255)
@@ -80,6 +82,13 @@ current_datetime = datetime.datetime.now()
 night_mode_start = datetime.time(hour = 21)
 night_mode_end = datetime.time(hour = 5)
 
+#alarm settings
+alarm_time = datetime.time(hour = 5)
+
+alarm_deactivation = None
+
+alarm_mode = False
+
 #weather
 api_url = "http://api.openweathermap.org/data/2.5/"
 api_url_end = ""
@@ -93,7 +102,7 @@ draw_count = 0
 weather_count = 0
 
 def load_config():
-    global api_url_end, backlight_default, backlight_night_mode, night_mode_start, night_mode_end
+    global api_url_end, backlight_default, backlight_night_mode, night_mode_start, night_mode_end, alarm_time
 
     print("Loading config file..")
     config = open('config.txt','r')
@@ -108,6 +117,8 @@ def load_config():
 
     night_mode_start = datetime.datetime.strptime(config.readline().split()[0], "%H:%M:%S").time()
     night_mode_end = datetime.datetime.strptime(config.readline().split()[0], "%H:%M:%S").time()
+
+    alarm_time = datetime.datetime.strptime(config.readline().split()[0], "%H:%M:%S").time()
 
     config.close()
 
@@ -176,17 +187,23 @@ def draw(display_info, screen):
 
     draw_count += 1
 
-    if is_night_mode(current_datetime.time()):
-        set_backlight(backlight_night_mode)
-    else:
+    if alarm_mode:
         set_backlight(backlight_default)
+    else:
+        if is_night_mode(current_datetime.time()):
+            set_backlight(backlight_night_mode)
+        else:
+            set_backlight(backlight_default)
 
     #get time as string
     time_string = current_datetime.strftime("%-H:%M")
     date_string = current_datetime.strftime("%-d %B %Y")
     
     #redraw the screen
-    screen.fill(bg_color)
+    if alarm_mode:
+        screen.fill(bg_color_alarm)
+    else:
+        screen.fill(bg_color)
         
     header_surface = header_font.render(time_string, header_aa, header_color)
     screen.blit(header_surface, rel_to_abs_surf(header_surface, header_position, display_info))
@@ -224,6 +241,21 @@ def handle_panels(mouse_pos):
     else:
         opened_panel = None
 
+def activate_alarm():
+    global alarm_mode, alarm_deactivation
+    alarm_mode = True
+
+    alarm_deactivation = datetime.datetime.now() + datetime.timedelta(minutes = 1)
+    draw(display_info, screen)
+
+def deactivate_alarm():
+    global alarm_mode
+    alarm_mode = False
+
+    alarm_deactivation = None
+    
+    draw(display_info, screen)
+
 def main():
     global current_datetime, opened_panel
 
@@ -245,12 +277,22 @@ def main():
             if event.type == pygame.QUIT or (event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE):
                 running = False
             elif event.type == pygame.MOUSEBUTTONUP:
+                if alarm_mode:
+                    deactivate_alarm()
                 handle_panels(pygame.mouse.get_pos())
                 draw(display_info, screen)
 
         #get current time
         prev_datetime = current_datetime
         current_datetime = datetime.datetime.now()
+
+        #check alarm
+        if (not alarm_mode) and prev_datetime.time() <= alarm_time and current_datetime.time() >= alarm_time:
+            activate_alarm()
+
+        #datetime.times cannot be incremented, so they are converted to datetime.datetimes and then incremented
+        if alarm_mode and current_datetime >= alarm_deactivation:
+            deactivate_alarm()
         
         #redraw every minute
         if current_datetime.time().second % 60 == 0 and prev_datetime.time().second % 60 == 59:
