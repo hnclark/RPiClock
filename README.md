@@ -8,7 +8,7 @@ Rename `example_config.txt` to `config.txt` and edit it to contain the relevant 
 
 ## Running the clock
 
-Simply run `sudo python clock.py` to run the program. It requires sudo to change the display's backlight brightness
+Run `./clock` to run the program. It requires sudo to change the display's backlight brightness
 
 ## Credits
 
