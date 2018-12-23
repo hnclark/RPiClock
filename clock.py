@@ -25,9 +25,9 @@ if(os.getuid() != 0):
 time_print("Initializing pygame...")
 pygame.init()
 
-screen = pygame.display.set_mode((0, 0), pygame.FULLSCREEN)
+#screen = pygame.display.set_mode((0, 0), pygame.FULLSCREEN)
 #for debugging (if a pygame script crashes while fullscreen it cannot be exited)
-#screen = pygame.display.set_mode((800,400))
+screen = pygame.display.set_mode((800,400))
 
 pygame.display.set_caption("Clock")
 
@@ -55,6 +55,8 @@ subheader_color= (255, 0, 0)
 subheader_position = (0.5, 0.825)
 subheader_aa = True
 
+next_draw = datetime.datetime.now()
+
 #weather icon
 weather_icon_position = (10, 10)
 weather_icon = pygame.image.load("icons/03d.png")
@@ -68,6 +70,8 @@ info_position = (70, 15)
 info_aa = True
 
 weather_string = "Loading weather..."
+
+next_weather_update = datetime.datetime.now()
 
 #forecast
 forecast_date_offset = (0, 30)
@@ -143,7 +147,7 @@ def get_weather_data(request_type):
         return None
     
 def update_weather():
-    global weather_string, weather_icon, forecast_list, weather_count
+    global weather_string, weather_icon, forecast_list, weather_count, next_weather_update, next_draw
 
     weather_count += 2
     
@@ -173,10 +177,12 @@ def update_weather():
             if date.time().hour == 15:
                 forecast_list.append((date, desc, icon))
             
-            
+        next_weather_update = datetime.datetime.now() + datetime.timedelta(hours = 1)
+        next_draw = datetime.datetime.now()
         
     else:
         time_print("ERROR: Could not load weather")
+        next_weather_update = datetime.datetime.now() + datetime.timedelta(minutes = 1)
 
 def is_night_mode(time):
     if night_mode_start < night_mode_end:
@@ -188,7 +194,7 @@ def is_night_mode(time):
         
 
 def draw(display_info, screen):
-    global draw_count
+    global draw_count, next_draw
 
     draw_count += 1
 
@@ -238,6 +244,8 @@ def draw(display_info, screen):
     
     pygame.display.flip()
 
+    next_draw = datetime.datetime.now() + datetime.timedelta(hours = 1)
+
 def handle_panels(mouse_pos):
     global opened_panel
     
@@ -247,32 +255,25 @@ def handle_panels(mouse_pos):
         opened_panel = None
 
 def activate_alarm():
-    global alarm_mode, alarm_deactivation
+    global alarm_mode, alarm_deactivation, next_draw
     alarm_mode = True
-
     alarm_deactivation = datetime.datetime.now() + datetime.timedelta(minutes = 1)
-    draw(display_info, screen)
+    
+    next_draw = datetime.datetime.now()
 
 def deactivate_alarm():
-    global alarm_mode
+    global alarm_mode, next_draw
     alarm_mode = False
-
     alarm_deactivation = None
     
-    draw(display_info, screen)
+    next_draw = datetime.datetime.now()
 
 def main():
-    global current_datetime, opened_panel
+    global current_datetime, opened_panel, next_draw
 
     load_config()
 
     #preliminary draw, so the user sees more than a black screen
-    draw(display_info, screen)
-
-    #get weather info
-    update_weather()
-
-    #redraw the screen with fetched weather info
     draw(display_info, screen)
     
     running = True
@@ -285,28 +286,24 @@ def main():
                 if alarm_mode:
                     deactivate_alarm()
                 handle_panels(pygame.mouse.get_pos())
-                draw(display_info, screen)
-
+                next_draw = datetime.datetime.now()
+                
         #get current time
         prev_datetime = current_datetime
         current_datetime = datetime.datetime.now()
 
-        #check alarm
-        if (not alarm_mode) and prev_datetime.time() <= alarm_time and current_datetime.time() >= alarm_time:
+        if prev_datetime.time() <= alarm_time and current_datetime.time() >= alarm_time:
             activate_alarm()
 
-        #datetime.times cannot be incremented, so they are converted to datetime.datetimes and then incremented
         if alarm_mode and current_datetime >= alarm_deactivation:
             deactivate_alarm()
-        
-        #redraw every minute
-        if current_datetime.time().second % 60 == 0 and prev_datetime.time().second % 60 == 59:
-            
-            #check weather every hour
-            if current_datetime.time().minute % 60 == 0 and prev_datetime.time().minute % 60 == 59:
-                update_weather()
 
+        #redraw if necessary or if minute changes
+        if current_datetime >= next_draw or (prev_datetime.time().second % 59 == 0 and current_datetime.time().second % 60 == 0):
             draw(display_info, screen)
+
+        if current_datetime >= next_weather_update:
+            update_weather()
 
         #sleep for 10ms to spare the cpu
         time.sleep(.01)
