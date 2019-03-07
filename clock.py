@@ -25,9 +25,9 @@ if(os.getuid() != 0):
 time_print("Initializing pygame...")
 pygame.init()
 
-#screen = pygame.display.set_mode((0, 0), pygame.FULLSCREEN)
+screen = pygame.display.set_mode((0, 0), pygame.FULLSCREEN)
 #for debugging (if a pygame script crashes while fullscreen it cannot be exited)
-screen = pygame.display.set_mode((800,400))
+#screen = pygame.display.set_mode((800,400))
 
 pygame.display.set_caption("Clock")
 
